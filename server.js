@@ -489,7 +489,7 @@ try {
     try {
         let isSem5SeededSetting = false;
         try {
-            const row = db.prepare("SELECT value FROM settings WHERE key = 'sem5_2026_seeded_v2'").get();
+            const row = db.prepare("SELECT value FROM settings WHERE key = 'sem5_2026_seeded_v3'").get();
             if (row && row.value === 'true') {
                 isSem5SeededSetting = true;
             }
@@ -550,6 +550,7 @@ try {
                                 'General',
                                 'Commerce',
                                 'B.Com. Sem-V',
+                                'Commerce Department',
                                 division,
                                 program,
                                 year,
@@ -564,7 +565,7 @@ try {
                 }
                 
                 // Record that we seeded it successfully
-                db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('sem5_2026_seeded_v2', 'true')").run();
+                db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('sem5_2026_seeded_v3', 'true')").run();
                 
                 db.exec('COMMIT;');
                 dbChanged = true; // Mark as changed to upload to MongoDB Atlas
@@ -1416,13 +1417,23 @@ app.post('/api/attendance/session/bulk-checkin', (req, res) => {
 
         db.exec("BEGIN TRANSACTION");
         
-        // Fetch all students in the class/division
-        const students = db.prepare(`
-            SELECT * FROM users 
-            WHERE role = 'student' 
-              AND class = ? 
-              AND division = ?
-        `).all(session.class_name, session.division);
+        // Fetch all students in the class/division (ignore division check if session is set to 'All' or student division matches B.Com Regular Sem 5 division)
+        let students;
+        if (session.division === 'All') {
+            students = db.prepare(`
+                SELECT * FROM users 
+                WHERE role = 'student' 
+                  AND class = ?
+            `).all(session.class_name);
+        } else {
+            // For Sem-5 regular class, also fallback if division is D but students' division is B.Com (Regular)
+            students = db.prepare(`
+                SELECT * FROM users 
+                WHERE role = 'student' 
+                  AND class = ? 
+                  AND (division = ? OR division = 'B.Com (Regular)')
+            `).all(session.class_name, session.division);
+        }
 
         for (const roll of roll_numbers) {
             const cleanRoll = roll.trim();
@@ -1430,7 +1441,7 @@ app.post('/api/attendance/session/bulk-checkin', (req, res) => {
 
             const user = students.find(s => {
                 const rollPart = s.username.replace(/^(VI|IV|III|II|I|V)/i, '').replace(/P$/i, '').trim();
-                return rollPart === cleanRoll;
+                return rollPart === cleanRoll || s.username.toLowerCase() === cleanRoll.toLowerCase();
             });
 
             if (!user) {
