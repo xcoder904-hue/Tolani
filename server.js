@@ -1346,12 +1346,22 @@ app.get('/api/students/list', (req, res) => {
     }
 
     try {
-        const stmt = db.prepare(`
-            SELECT id, name, username, gender, division
-            FROM users
-            WHERE role = 'student' AND class = ? AND division = ?
-        `);
-        const students = stmt.all(class_name, division);
+        let students;
+        if (division === 'All') {
+            const stmt = db.prepare(`
+                SELECT id, name, username, gender, division
+                FROM users
+                WHERE role = 'student' AND class = ?
+            `);
+            students = stmt.all(class_name);
+        } else {
+            const stmt = db.prepare(`
+                SELECT id, name, username, gender, division
+                FROM users
+                WHERE role = 'student' AND class = ? AND division = ?
+            `);
+            students = stmt.all(class_name, division);
+        }
 
         // Derive roll number and sort numerically
         students.forEach(s => {
@@ -1463,8 +1473,8 @@ app.post('/api/attendance/session/bulk-checkin', (req, res) => {
             // Create record
             const markedAt = new Date().toISOString();
             db.prepare(`
-                INSERT INTO attendance_records (session_id, student_id, device_id, status, marked_at, location_verified)
-                VALUES (?, ?, 'MANUAL_PHONE', 'present', ?, 1)
+                INSERT INTO attendance_records (session_id, student_id, device_id, status, marked_at)
+                VALUES (?, ?, 'MANUAL_PHONE', 'present', ?)
             `).run(session.id, user.id, markedAt);
             
             added.push(cleanRoll);
@@ -1832,8 +1842,12 @@ app.post('/api/attendance/session/close', (req, res) => {
 
         db.prepare("UPDATE attendance_sessions SET is_active = 0, status = 'CLOSED' WHERE id = ?").run(session.id);
 
-        // Mark any remaining PENDING student check-ins as ABSENT
-        db.prepare("UPDATE attendance_records SET status = 'absent' WHERE session_id = ? AND (status = 'pending' OR status = 'PENDING')").run(session.id);
+        // Mark any remaining PENDING student check-ins as ABSENT or PRESENT based on whether verification was started
+        if (session.verification_started === 1) {
+            db.prepare("UPDATE attendance_records SET status = 'absent' WHERE session_id = ? AND (status = 'pending' OR status = 'PENDING')").run(session.id);
+        } else {
+            db.prepare("UPDATE attendance_records SET status = 'present' WHERE session_id = ? AND (status = 'pending' OR status = 'PENDING')").run(session.id);
+        }
         dbChanged = true;
 
         // Broadcast to all connected students
