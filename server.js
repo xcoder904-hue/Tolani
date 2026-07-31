@@ -1526,7 +1526,8 @@ app.get('/api/attendance/sessions', (req, res) => {
         let sql = `
             SELECT s.id, s.code, s.class_name, s.subject, s.division, s.program, s.created_at, s.is_active, s.lecture_slot, u.name as creator_name,
               (SELECT count(*) FROM attendance_records WHERE session_id = s.id AND status = 'present') as present_count,
-              (SELECT count(*) FROM attendance_records WHERE session_id = s.id AND status = 'absent') as absent_count,
+              ((SELECT count(*) FROM users WHERE role = 'student' AND class = s.class_name AND (s.division = 'All' OR division = s.division)) - 
+               (SELECT count(*) FROM attendance_records WHERE session_id = s.id AND (status = 'present' OR status = 'flagged'))) as absent_count,
               (SELECT count(*) FROM attendance_records WHERE session_id = s.id AND status = 'flagged') as flagged_count
             FROM attendance_sessions s
             JOIN users u ON s.creator_id = u.id
