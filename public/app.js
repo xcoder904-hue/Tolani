@@ -5239,7 +5239,7 @@ window.renderUnifiedAttendanceReport = async function(isTeacherOnly) {
 
             <!-- Filters -->
             <div class="glass-card mb-24" style="padding: 16px;">
-                <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)) 120px 140px 100px; align-items: flex-end; gap: 12px;">
+                <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)) 120px 120px 100px; align-items: flex-end; gap: 12px;">
                     <div>
                         <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">Class</label>
                         <select id="sheet-class" class="form-control"></select>
@@ -5253,22 +5253,12 @@ window.renderUnifiedAttendanceReport = async function(isTeacherOnly) {
                         <select id="sheet-subject" class="form-control"></select>
                     </div>
                     <div>
-                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">Month</label>
-                        <select id="sheet-month" class="form-control">
-                            <option value="All">All Months</option>
-                            <option value="January 2026">January 2026</option>
-                            <option value="February 2026">February 2026</option>
-                            <option value="March 2026">March 2026</option>
-                            <option value="April 2025">April 2025</option>
-                            <option value="May 2025">May 2025</option>
-                            <option value="June 2025">June 2025</option>
-                            <option value="July 2025">July 2025</option>
-                            <option value="August 2025">August 2025</option>
-                            <option value="September 2025">September 2025</option>
-                            <option value="October 2025">October 2025</option>
-                            <option value="November 2025">November 2025</option>
-                            <option value="December 2025">December 2025</option>
-                        </select>
+                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">Start Date</label>
+                        <input type="date" id="sheet-start-date" class="form-control">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">End Date</label>
+                        <input type="date" id="sheet-end-date" class="form-control">
                     </div>
                     <div>
                         <button class="btn btn-primary" id="sheet-search-btn" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -5415,6 +5405,18 @@ window.renderUnifiedAttendanceReport = async function(isTeacherOnly) {
         divSelect.innerHTML = data.divisions.map(d => `<option value="${d}">Division ${d}</option>`).join('');
         subjSelect.innerHTML = data.subjects.map(s => `<option value="${s}">${s}</option>`).join('');
 
+        // Populate default values for Start Date and End Date
+        const today = new Date();
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        const formatDate = (date) => {
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        };
+        document.getElementById("sheet-start-date").value = formatDate(startOfMonth);
+        document.getElementById("sheet-end-date").value = formatDate(today);
+
         // Apply style rules for active row highlighting
         const style = document.createElement('style');
         style.id = 'attendance-sheet-highlight-styles';
@@ -5450,7 +5452,8 @@ window.renderUnifiedAttendanceReport = async function(isTeacherOnly) {
             const cls = classSelect.value;
             const div = divSelect.value;
             const sub = subjSelect.value;
-            const mth = document.getElementById("sheet-month").value;
+            const startDate = document.getElementById("sheet-start-date").value;
+            const endDate = document.getElementById("sheet-end-date").value;
 
             // Show mini spinners on stat numbers
             document.getElementById("stat-students").innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 14px;"></i>`;
@@ -5459,7 +5462,7 @@ window.renderUnifiedAttendanceReport = async function(isTeacherOnly) {
             document.getElementById("stat-absent").innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 14px;"></i>`;
             document.getElementById("stat-overall").innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="font-size: 14px;"></i>`;
 
-            const queryRes = await fetch(`/api/attendance/analytics?class_name=${encodeURIComponent(cls)}&division=${encodeURIComponent(div)}&subject=${encodeURIComponent(sub)}&month=${encodeURIComponent(mth)}`);
+            const queryRes = await fetch(`/api/attendance/analytics?class_name=${encodeURIComponent(cls)}&division=${encodeURIComponent(div)}&subject=${encodeURIComponent(sub)}&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`);
             const resData = await queryRes.json();
 
             if (!resData.success) {

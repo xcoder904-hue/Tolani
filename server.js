@@ -1575,7 +1575,7 @@ app.delete('/api/attendance/session/:sessionId', (req, res) => {
 });
 
 app.get('/api/attendance/analytics', (req, res) => {
-    let { class_name, division, subject, month } = req.query;
+    let { class_name, division, subject, start_date, end_date } = req.query;
 
     try {
         // Get all distinct classes, divisions, subjects for dropdown filters population
@@ -1615,37 +1615,24 @@ app.get('/api/attendance/analytics', (req, res) => {
         });
         students.sort((a, b) => parseInt(a.roll_no) - parseInt(b.roll_no));
 
-        // Fetch all attendance sessions matching filters
-        let sessions = db.prepare(`
+        // Fetch all attendance sessions matching filters within the date range
+        let querySql = `
             SELECT id, created_at 
             FROM attendance_sessions 
             WHERE class_name = ? AND division = ? AND subject = ?
-        `).all(class_name, division, subject);
+        `;
+        let queryParams = [class_name, division, subject];
 
-        // Filter sessions by month if a specific month is requested
-        if (month && month !== "All") {
-            const monthsMap = {
-                "January": "01", "February": "02", "March": "03", "April": "04",
-                "May": "05", "June": "06", "July": "07", "August": "08",
-                "September": "09", "October": "10", "November": "11", "December": "12"
-            };
-            
-            const parts = month.split(' ');
-            const mName = parts[0];
-            const yearStr = parts[1];
-            const mNum = monthsMap[mName];
-
-            if (mNum) {
-                sessions = sessions.filter(s => {
-                    const dateStr = s.created_at;
-                    const matchesMonth = dateStr.includes(`-${mNum}-`) || dateStr.startsWith(`2026-${mNum}-`) || dateStr.startsWith(`2025-${mNum}-`);
-                    if (yearStr) {
-                        return matchesMonth && dateStr.includes(yearStr);
-                    }
-                    return matchesMonth;
-                });
-            }
+        if (start_date) {
+            querySql += ` AND created_at >= ? `;
+            queryParams.push(start_date + ' 00:00:00');
         }
+        if (end_date) {
+            querySql += ` AND created_at <= ? `;
+            queryParams.push(end_date + ' 23:59:59');
+        }
+
+        let sessions = db.prepare(querySql).all(...queryParams);
 
         const totalLectures = sessions.length;
         const sessionIds = sessions.map(s => s.id);
