@@ -479,7 +479,7 @@ if ($route === 'teacher/update-profile' && $method === 'POST') {
 // 12. Storage Diagnostics Handler
 if ($route === 'admin/storage-info' && $method === 'GET') {
     $db_file = __DIR__ . '/database.db';
-    $uploads_dir = __DIR__ . '/public/uploads';
+    $uploads_dir = __DIR__ . '/uploads';
     
     $db_size = file_exists($db_file) ? filesize($db_file) : 0;
     
