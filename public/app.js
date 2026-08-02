@@ -7047,6 +7047,9 @@ window.renderTeacherLecture_history = async function() {
                 <div class="card-header-flex mb-16" style="flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;">
                     <h3 class="card-title"><i class="fa-solid fa-clock-rotate-left mr-8"></i> Manage Taken Lectures</h3>
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-secondary btn-sm" onclick="window.showOfflineAttendanceImporter()" style="padding: 6px 12px; font-size: 12px; border-radius: 8px; font-weight: 600; display: flex; align-items: center; gap: 6px; background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); color: #818cf8; margin: 0; cursor: pointer;">
+                            <i class="fa-solid fa-file-import"></i> Import Offline Attendance
+                        </button>
                         <input type="text" id="teacher-history-search" class="form-control" placeholder="Search lectures..." style="width: 220px; font-size: 12px; height: 32px; padding: 4px 8px; margin: 0;">
                         <span class="attendance-status-pill status-active">${sessions.length} Lectures Taken</span>
                     </div>
@@ -7294,6 +7297,9 @@ window.renderAdminAdmin_lectures = async function() {
                 <div class="card-header-flex mb-16" style="flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;">
                     <h3 class="card-title"><i class="fa-solid fa-chalkboard-user mr-8"></i> Faculty Lectures Report</h3>
                     <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-secondary btn-sm" onclick="window.showOfflineAttendanceImporter()" style="padding: 6px 12px; font-size: 12px; border-radius: 8px; font-weight: 600; display: flex; align-items: center; gap: 6px; background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); color: #818cf8; margin: 0; cursor: pointer;">
+                            <i class="fa-solid fa-file-import"></i> Import Offline Attendance
+                        </button>
                         <input type="text" id="admin-lectures-search" class="form-control" placeholder="Search lectures..." style="width: 220px; font-size: 12px; height: 32px; padding: 4px 8px; margin: 0;">
                         <span class="attendance-status-pill status-active" id="admin-total-lectures-badge">${allSessions.length} Lectures Taken</span>
                     </div>
@@ -7411,4 +7417,237 @@ document.addEventListener("input", (e) => {
         });
     }
 });
+
+// Import Offline Attendance Sheet Helper (Excel/CSV Parser)
+window.showOfflineAttendanceImporter = async function() {
+    if (!window.XLSX) {
+        const script = document.createElement('script');
+        script.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+        document.head.appendChild(script);
+    }
+    
+    generalModalTitle.textContent = "Import Offline Attendance Sheet (Excel/CSV)";
+    generalModalBody.innerHTML = `<div class="text-center" style="padding: 24px;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; color: var(--primary);"></i> Loading filters...</div>`;
+    generalModal.classList.add("active");
+    
+    try {
+        const res = await fetch('/api/attendance/analytics');
+        const filterData = await res.json();
+        if (!filterData.success) {
+            generalModalBody.innerHTML = `<p style="color: var(--danger); padding: 16px;">Failed to load filter metadata.</p>`;
+            return;
+        }
+
+        const classes = filterData.classes || [];
+        const divisions = filterData.divisions || [];
+        const subjects = filterData.subjects || [];
+
+        generalModalBody.innerHTML = `
+            <form id="offline-import-form" style="display: flex; flex-direction: column; gap: 16px; font-size: 13px; text-align: left; padding: 4px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label><strong>Class / Semester</strong></label>
+                        <select id="offline-class" class="form-control" required style="padding: 8px;">
+                            ${classes.map(c => `<option value="${c}">${c}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label><strong>Division</strong></label>
+                        <select id="offline-division" class="form-control" required style="padding: 8px;">
+                            ${divisions.map(d => `<option value="${d}">Division ${d}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label><strong>Subject</strong></label>
+                    <select id="offline-subject" class="form-control" required style="padding: 8px;">
+                        ${subjects.map(s => `<option value="${s}">${s}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label><strong>Lecture Date</strong></label>
+                        <input type="date" id="offline-date" class="form-control" required style="padding: 8px;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <label><strong>Lecture Slot</strong></label>
+                        <select id="offline-slot" class="form-control" required style="padding: 8px;">
+                            <option value="Lecture 1">Lecture 1</option>
+                            <option value="Lecture 2">Lecture 2</option>
+                            <option value="Lecture 3">Lecture 3</option>
+                            <option value="Lecture 4">Lecture 4</option>
+                            <option value="Lecture 5">Lecture 5</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    <label><strong>Choose Excel or CSV File</strong></label>
+                    <input type="file" id="offline-file" accept=".csv,.xlsx,.xls" class="form-control" required style="padding: 6px;">
+                    <span style="font-size: 11px; color: var(--text-muted);">
+                        The sheet must list the **Roll Numbers** of present students. The system will automatically mark them as present and others as absent.
+                    </span>
+                </div>
+
+                <div id="offline-preview" style="display: none; padding: 12px; background: rgba(99, 102, 241, 0.1); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: 8px; max-height: 120px; overflow-y: auto;">
+                    <strong>File Preview:</strong>
+                    <div id="offline-preview-text" style="font-size: 12px; margin-top: 4px; color: var(--text-muted); word-break: break-all;"></div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 10px; height: 38px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; width: 100%;">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Import & Save Attendance
+                </button>
+            </form>
+        `;
+
+        // Set default date to today
+        const todayStr = new Date().toISOString().split('T')[0];
+        document.getElementById("offline-date").value = todayStr;
+
+        const fileInput = document.getElementById("offline-file");
+        const previewDiv = document.getElementById("offline-preview");
+        const previewText = document.getElementById("offline-preview-text");
+
+        let extractedRolls = [];
+
+        fileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            const extension = file.name.split('.').pop().toLowerCase();
+
+            if (extension === 'csv') {
+                reader.onload = (evt) => {
+                    const text = evt.target.result;
+                    const lines = text.split(/\r?\n/);
+                    extractedRolls = [];
+
+                    lines.forEach((line) => {
+                        const cols = line.split(',');
+                        cols.forEach(col => {
+                            const val = col.trim().replace(/^["']|["']$/g, '');
+                            if (/^\d+$/.test(val)) {
+                                const num = parseInt(val);
+                                if (num > 0 && num < 1000 && !extractedRolls.includes(num)) {
+                                    extractedRolls.push(num);
+                                }
+                            }
+                        });
+                    });
+
+                    extractedRolls.sort((a, b) => a - b);
+                    previewDiv.style.display = "block";
+                    previewText.textContent = `Found ${extractedRolls.length} present student roll numbers: ${extractedRolls.join(', ')}`;
+                };
+                reader.readAsText(file);
+            } else if (extension === 'xlsx' || extension === 'xls') {
+                if (!window.XLSX) {
+                    alert("Initializing Excel parser... Please select the file again in a second.");
+                    return;
+                }
+                reader.onload = (evt) => {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    extractedRolls = [];
+                    jsonData.forEach(row => {
+                        if (Array.isArray(row)) {
+                            row.forEach(cell => {
+                                const val = String(cell).trim();
+                                if (/^\d+$/.test(val)) {
+                                    const num = parseInt(val);
+                                    if (num > 0 && num < 1000 && !extractedRolls.includes(num)) {
+                                        extractedRolls.push(num);
+                                    }
+                                }
+                            });
+                        }
+                    });
+
+                    extractedRolls.sort((a, b) => a - b);
+                    previewDiv.style.display = "block";
+                    previewText.textContent = `Found ${extractedRolls.length} present student roll numbers: ${extractedRolls.join(', ')}`;
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        });
+
+        const form = document.getElementById("offline-import-form");
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            if (extractedRolls.length === 0) {
+                alert("No student roll numbers could be extracted from this file. Please verify the file content.");
+                return;
+            }
+
+            const className = document.getElementById("offline-class").value;
+            const division = document.getElementById("offline-division").value;
+            const subject = document.getElementById("offline-subject").value;
+            const date = document.getElementById("offline-date").value;
+            const slot = document.getElementById("offline-slot").value;
+
+            let program = "B.Com (Regular)";
+            if (className.includes("Prof")) {
+                program = "B.Com (Professional)";
+            } else if (className.includes("M.Com") || className.includes("MCom")) {
+                program = "M.Com";
+            }
+
+            if (!confirm(`Import attendance for ${extractedRolls.length} present students in class ${className} Division ${division}? This will record the lecture as taken.`)) {
+                return;
+            }
+
+            const submitBtn = form.querySelector("button[type='submit']");
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+
+            try {
+                const importRes = await fetch('/api/attendance/session/import-offline', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        class_name: className,
+                        division,
+                        subject,
+                        program,
+                        date,
+                        slot,
+                        present_rolls: extractedRolls
+                    })
+                });
+
+                const importData = await importRes.json();
+                if (importData.success) {
+                    alert("Attendance successfully imported!");
+                    generalModal.classList.remove("active");
+                    if (currentUser.role === 'admin') {
+                        window.renderAdminAdmin_lectures();
+                    } else {
+                        window.renderTeacherLecture_history();
+                    }
+                } else {
+                    alert(importData.error || "Failed to import attendance.");
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Import & Save Attendance`;
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Network error submitting offline attendance.");
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> Import & Save Attendance`;
+            }
+        });
+
+    } catch (err) {
+        console.error(err);
+        generalModalBody.innerHTML = `<p style="color: var(--danger); padding: 16px;">Failed to initialize importer.</p>`;
+    }
+};
 

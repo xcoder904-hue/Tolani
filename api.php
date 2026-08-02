@@ -256,6 +256,83 @@ if ($route === 'attendance/session/close' && $method === 'POST') {
     exit;
 }
 
+// 16. Import Offline Attendance Sheet Handler
+if ($route === 'attendance/session/import-offline' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $class_name = $input['class_name'] ?? '';
+    $division = $input['division'] ?? '';
+    $subject = $input['subject'] ?? '';
+    $program = $input['program'] ?? '';
+    $date = $input['date'] ?? '';
+    $slot = $input['slot'] ?? '';
+    $present_rolls = $input['present_rolls'] ?? [];
+    $creator_id = $_SESSION['user']['id'] ?? 1;
+
+    if (!$class_name || !$division || !$subject || !$date || !$slot || !is_array($present_rolls)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required metadata or roll numbers.']);
+        exit;
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $code = 'OFFLINE-' . rand(100000, 999999);
+        $createdAt = "$date 10:00:00";
+        $expiresAt = "$date 11:00:00";
+
+        // Insert session
+        $stmt = $pdo->prepare("
+            INSERT INTO attendance_sessions (code, creator_id, class_name, subject, division, program, created_at, expires_at, is_active, status, lecture_slot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'CLOSED', ?)
+        ");
+        $stmt->execute([$code, $creator_id, $class_name, $subject, $division, $program, $createdAt, $expiresAt, $slot]);
+        
+        $sessionId = $pdo->lastInsertId();
+
+        // Fetch students
+        if ($division === 'All') {
+            $stmt = $pdo->prepare("SELECT id, username FROM users WHERE role = 'student' AND class = ?");
+            $stmt->execute([$class_name]);
+        } else {
+            $stmt = $pdo->prepare("SELECT id, username FROM users WHERE role = 'student' AND class = ? AND (division = ? OR division = 'B.Com (Regular)')");
+            $stmt->execute([$class_name, $division]);
+        }
+        $students = $stmt->fetchAll();
+
+        // Insert attendance records
+        $insertStmt = $pdo->prepare("
+            INSERT INTO attendance_records (session_id, student_id, device_id, status, marked_at)
+            VALUES (?, ?, 'OFFLINE_IMPORT', ?, ?)
+        ");
+
+        foreach ($students as $student) {
+            $rollPart = preg_replace('/^(VI|IV|III|II|I|V)/i', '', $student['username']);
+            $rollPart = preg_replace('/P$/i', '', $rollPart);
+            $rollPart = trim($rollPart);
+
+            $isPresent = false;
+            foreach ($present_rolls as $roll) {
+                $cleanRoll = trim($roll);
+                if ($rollPart === $cleanRoll || strtolower($student['username']) === strtolower($cleanRoll)) {
+                    $isPresent = true;
+                    break;
+                }
+            }
+
+            $status = $isPresent ? 'present' : 'absent';
+            $insertStmt->execute([$sessionId, (int)$student['id'], $status, $createdAt]);
+        }
+
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'Offline attendance sheet successfully imported.']);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
 // 8. Taken Lectures History Handler
 if ($route === 'attendance/sessions' && $method === 'GET') {
     $creator_id = $_GET['creator_id'] ?? null;

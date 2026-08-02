@@ -1519,6 +1519,71 @@ app.get('/api/attendance/active-sessions', (req, res) => {
     }
 });
 
+// Import completed backdated/offline attendance sheet
+app.post('/api/attendance/session/import-offline', (req, res) => {
+    const { class_name, division, subject, program, date, slot, present_rolls } = req.body;
+    const creator_id = req.session?.user?.id || 1;
+
+    if (!class_name || !division || !subject || !date || !slot || !Array.isArray(present_rolls)) {
+        return res.status(400).json({ error: 'Missing required metadata or roll numbers.' });
+    }
+
+    try {
+        db.exec('BEGIN TRANSACTION;');
+        
+        // Generate unique code and timestamps
+        const code = 'OFFLINE-' + Math.floor(100000 + Math.random() * 900000);
+        const createdAt = `${date} 10:00:00`;
+        const expiresAt = `${date} 11:00:00`;
+
+        // Insert completed offline session
+        const sessionInsert = db.prepare(`
+            INSERT INTO attendance_sessions (code, creator_id, class_name, subject, division, program, created_at, expires_at, is_active, status, lecture_slot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'CLOSED', ?)
+        `).run(code, creator_id, class_name, subject, division, program, createdAt, expiresAt, slot);
+
+        const sessionId = sessionInsert.lastInsertRowid;
+
+        // Fetch students in this class and division
+        let students;
+        if (division === 'All') {
+            students = db.prepare(`
+                SELECT id, username FROM users 
+                WHERE role = 'student' AND class = ?
+            `).all(class_name);
+        } else {
+            students = db.prepare(`
+                SELECT id, username FROM users 
+                WHERE role = 'student' AND class = ? AND (division = ? OR division = 'B.Com (Regular)')
+            `).all(class_name, division);
+        }
+
+        const insertRecord = db.prepare(`
+            INSERT INTO attendance_records (session_id, student_id, device_id, status, marked_at)
+            VALUES (?, ?, 'OFFLINE_IMPORT', ?, ?)
+        `);
+
+        students.forEach(student => {
+            const rollPart = student.username.replace(/^(VI|IV|III|II|I|V)/i, '').replace(/P$/i, '').trim();
+            const isPresent = present_rolls.some(roll => {
+                const cleanRoll = String(roll).trim();
+                return rollPart === cleanRoll || student.username.toLowerCase() === cleanRoll.toLowerCase();
+            });
+
+            const status = isPresent ? 'present' : 'absent';
+            insertRecord.run(sessionId, student.id, status, createdAt);
+        });
+
+        db.exec('COMMIT;');
+        dbChanged = true; // Trigger MongoDB sync
+        res.json({ success: true, message: 'Offline attendance sheet successfully imported.' });
+    } catch (err) {
+        db.exec('ROLLBACK;');
+        console.error('Error importing offline attendance:', err);
+        res.status(500).json({ error: 'Failed to import offline attendance.' });
+    }
+});
+
 // Retrieve list of attendance sessions (lectures) with filters and summary counts
 app.get('/api/attendance/sessions', (req, res) => {
     const { creator_id, class_name, division } = req.query;
