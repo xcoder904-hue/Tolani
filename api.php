@@ -21,6 +21,17 @@ require_once __DIR__ . '/db.php';
 
 // Parse query route path
 $route = $_GET['route'] ?? '';
+if (empty($route)) {
+    $route = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+}
+
+// Normalize route: strip everything before and including 'api/' to support subdirectories and custom web server setups
+$apiPos = strpos($route, 'api/');
+if ($apiPos !== false) {
+    $route = substr($route, $apiPos + 4);
+}
+$route = trim($route, '/');
+
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Set default response headers to JSON
