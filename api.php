@@ -40,7 +40,7 @@ header('Content-Type: application/json');
 // --- ROUTER HANDLERS ---
 
 // 1. Auth Login Handler
-if ($route === 'auth/login' && $method === 'POST') {
+if (($route === 'login' || $route === 'auth/login') && $method === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true);
     $username = $input['username'] ?? '';
     $password = $input['password'] ?? '';
@@ -83,7 +83,7 @@ if ($route === 'auth/login' && $method === 'POST') {
 }
 
 // 2. Get Current Auth Session Handler
-if ($route === 'auth/session' && $method === 'GET') {
+if (($route === 'session' || $route === 'auth/session') && $method === 'GET') {
     if (isset($_SESSION['user'])) {
         echo json_encode(['success' => true, 'user' => $_SESSION['user']]);
     } else {
@@ -93,7 +93,7 @@ if ($route === 'auth/session' && $method === 'GET') {
 }
 
 // 3. Logout Handler
-if ($route === 'auth/logout' && $method === 'POST') {
+if (($route === 'logout' || $route === 'auth/logout') && $method === 'POST') {
     session_destroy();
     echo json_encode(['success' => true, 'message' => 'Logged out successfully.']);
     exit;
