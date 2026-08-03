@@ -1336,7 +1336,7 @@ if ($route === 'marks/save' && $method === 'POST') {
 
 // 25. Settings Handlers (Drive, Fees, Profile Edit Permissions)
 if ($route === 'settings/drive' && $method === 'GET') {
-    $stmt = $pdo->prepare("SELECT value FROM settings WHERE key_name = 'google_drive_script_url'");
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE `key` = 'google_drive_script_url'");
     $stmt->execute();
     $row = $stmt->fetch();
     echo json_encode(['success' => true, 'url' => $row ? $row['value'] : '']);
@@ -1347,7 +1347,7 @@ if ($route === 'settings/drive' && $method === 'POST') {
     $input = json_decode(file_get_contents('php://input'), true);
     $url = $input['url'] ?? '';
     $stmt = $pdo->prepare("
-        INSERT INTO settings (key_name, value) VALUES ('google_drive_script_url', ?)
+        INSERT INTO settings (`key`, value) VALUES ('google_drive_script_url', ?)
         ON DUPLICATE KEY UPDATE value = VALUES(value)
     ");
     $stmt->execute([$url]);
@@ -1360,7 +1360,7 @@ if ($route === 'settings/fees' && $method === 'GET') {
     $rows = $stmt->fetchAll();
     $settingsMap = [];
     foreach ($rows as $r) {
-        $settingsMap[$r['key_name']] = $r['value'];
+        $settingsMap[$r['key']] = $r['value'];
     }
     echo json_encode([
         'success' => true,
@@ -1389,7 +1389,7 @@ if ($route === 'settings/fees' && $method === 'POST') {
     $pdo->beginTransaction();
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO settings (key_name, value) VALUES (?, ?)
+            INSERT INTO settings (`key`, value) VALUES (?, ?)
             ON DUPLICATE KEY UPDATE value = VALUES(value)
         ");
         foreach ($fees as $key => $val) {
@@ -1410,7 +1410,7 @@ if ($route === 'settings/profile-permissions' && $method === 'GET') {
     $rows = $stmt->fetchAll();
     $settingsMap = [];
     foreach ($rows as $r) {
-        $settingsMap[$r['key_name']] = $r['value'];
+        $settingsMap[$r['key']] = $r['value'];
     }
     echo json_encode([
         'success' => true,
@@ -1428,7 +1428,7 @@ if ($route === 'settings/profile-permissions' && $method === 'POST') {
     $pdo->beginTransaction();
     try {
         $stmt = $pdo->prepare("
-            INSERT INTO settings (key_name, value) VALUES (?, ?)
+            INSERT INTO settings (`key`, value) VALUES (?, ?)
             ON DUPLICATE KEY UPDATE value = VALUES(value)
         ");
         $stmt->execute(['allow_student_profile_edit', $allow_student_profile_edit ? 'true' : 'false']);
@@ -1818,7 +1818,7 @@ if ($route === 'student/update-profile' && $method === 'POST') {
         exit;
     }
     
-    $permStmt = $pdo->query("SELECT value FROM settings WHERE key_name = 'allow_student_profile_edit'");
+    $permStmt = $pdo->query("SELECT value FROM settings WHERE `key` = 'allow_student_profile_edit'");
     $allow = $permStmt->fetchColumn();
     if ($allow === 'false') {
         http_response_code(403);
@@ -2436,10 +2436,10 @@ if ($route === 'admin/import-prof-sem3-sem5' && $method === 'POST') {
         
         $feeBoy = 9500;
         $feeGirl = 8500;
-        $stmt = $pdo->query("SELECT value FROM settings WHERE key_name = 'fee_baseline_bcom_professional_boy'");
+        $stmt = $pdo->query("SELECT value FROM settings WHERE `key` = 'fee_baseline_bcom_professional_boy'");
         $val = $stmt->fetchColumn();
         if ($val) $feeBoy = (double)$val;
-        $stmt = $pdo->query("SELECT value FROM settings WHERE key_name = 'fee_baseline_bcom_professional_girl'");
+        $stmt = $pdo->query("SELECT value FROM settings WHERE `key` = 'fee_baseline_bcom_professional_girl'");
         $val = $stmt->fetchColumn();
         if ($val) $feeGirl = (double)$val;
         
