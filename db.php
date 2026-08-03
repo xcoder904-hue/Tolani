@@ -22,8 +22,32 @@ try {
      header('Content-Type: application/json');
      http_response_code(500);
      echo json_encode([
-         'success' => false,
-         'error' => 'Database connection failed: ' . $e->getMessage()
-     ]);
+          'success' => false,
+          'error' => 'Database connection failed: ' . $e->getMessage()
+      ]);
      exit;
+}
+
+// Helper function to calculate distance using Haversine formula
+function getDistanceKm($lat1, $lon1, $lat2, $lon2) {
+    $R = 6371; // Earth radius in km
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+    $a = sin($dLat / 2) * sin($dLat / 2) +
+         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * 
+         sin($dLon / 2) * sin($dLon / 2);
+    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+    return $R * $c;
+}
+
+// Helper function to emulate JS djb2 15-second hashing for OTP codes
+function get15SecondHash($secretKey, $timeWindow) {
+    $input = $secretKey . "_" . $timeWindow;
+    $hash = 5381;
+    for ($i = 0; $i < strlen($input); $i++) {
+        $hash = (($hash * 33) & 0xFFFFFFFF) + ord($input[$i]);
+        $hash = $hash & 0xFFFFFFFF;
+    }
+    $num = ($hash % 900000) + 100000;
+    return (string)$num;
 }

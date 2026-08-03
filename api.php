@@ -831,6 +831,1695 @@ if ($route === 'attendance/analytics' && $method === 'GET') {
     exit;
 }
 
+// 16. Delete Active Session and Records
+if (preg_match('/^attendance\/session\/(\d+)$/', $route, $matches) && $method === 'DELETE') {
+    $sessionId = (int)$matches[1];
+    $pdo->prepare('DELETE FROM attendance_records WHERE session_id = ?')->execute([$sessionId]);
+    $pdo->prepare('DELETE FROM attendance_sessions WHERE id = ?')->execute([$sessionId]);
+    echo json_encode(['success' => true, 'message' => 'Lecture session and attendance records deleted successfully.']);
+    exit;
+}
+
+// 17. Subjects Management Handlers
+if ($route === 'subjects' && $method === 'GET') {
+    $program = $_GET['program'] ?? '';
+    if ($program) {
+        $stmt = $pdo->prepare('SELECT * FROM subjects WHERE program = ? ORDER BY id ASC');
+        $stmt->execute([$program]);
+    } else {
+        $stmt = $pdo->query('SELECT * FROM subjects ORDER BY program ASC, id ASC');
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'subjects' => $rows]);
+    exit;
+}
+
+if ($route === 'subjects/add' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $name = $input['name'] ?? '';
+    $code = $input['code'] ?? '';
+    $program = $input['program'] ?? '';
+    $year = $input['year'] ?? '1st Year';
+    $semester = $input['semester'] ?? 'Semester 1';
+    
+    if (!$name || !$code || !$program) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required subject parameters (name, code, program).']);
+        exit;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("INSERT INTO subjects (name, code, program, year, semester) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([$name, $code, $program, $year, $semester]);
+        echo json_encode(['success' => true, 'message' => "Subject '$name' registered successfully."]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to register subject. Code may already exist.']);
+    }
+    exit;
+}
+
+if ($route === 'subjects/delete' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Subject ID is required.']);
+        exit;
+    }
+    $pdo->prepare('DELETE FROM subjects WHERE id = ?')->execute([$id]);
+    echo json_encode(['success' => true, 'message' => 'Subject deleted successfully.']);
+    exit;
+}
+
+// 18. Notices Management Handlers
+if ($route === 'notices' && $method === 'GET') {
+    $program = $_GET['program'] ?? '';
+    if ($program) {
+        $stmt = $pdo->prepare("SELECT * FROM notices WHERE program = ? OR program = 'All' ORDER BY created_at DESC");
+        $stmt->execute([$program]);
+    } else {
+        $stmt = $pdo->query('SELECT * FROM notices ORDER BY created_at DESC');
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'notices' => $rows]);
+    exit;
+}
+
+if ($route === 'notices/add' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $title = $input['title'] ?? '';
+    $content = $input['content'] ?? '';
+    $program = $input['program'] ?? '';
+    
+    if (!$title || !$content || !$program) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required notice parameters.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare('INSERT INTO notices (title, content, program) VALUES (?, ?, ?)');
+    $stmt->execute([$title, $content, $program]);
+    echo json_encode(['success' => true, 'message' => 'Notice posted successfully.']);
+    exit;
+}
+
+if ($route === 'notices/delete' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Notice ID is required.']);
+        exit;
+    }
+    $pdo->prepare('DELETE FROM notices WHERE id = ?')->execute([$id]);
+    echo json_encode(['success' => true, 'message' => 'Notice deleted successfully.']);
+    exit;
+}
+
+// 19. Timetables Management Handlers
+if ($route === 'timetables' && $method === 'GET') {
+    $program = $_GET['program'] ?? '';
+    if ($program) {
+        $stmt = $pdo->prepare('SELECT * FROM timetables WHERE program = ?');
+        $stmt->execute([$program]);
+    } else {
+        $stmt = $pdo->query('SELECT * FROM timetables');
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'timetables' => $rows]);
+    exit;
+}
+
+if ($route === 'timetables/save' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $program = $input['program'] ?? '';
+    $day = $input['day'] ?? '';
+    $slot_1 = $input['slot_1'] ?? '';
+    $slot_2 = $input['slot_2'] ?? '';
+    $slot_3 = $input['slot_3'] ?? '';
+    $slot_4 = $input['slot_4'] ?? '';
+    
+    if (!$program || !$day) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Program and day parameters are required.']);
+        exit;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO timetables (program, day, slot_1, slot_2, slot_3, slot_4)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                slot_1 = VALUES(slot_1),
+                slot_2 = VALUES(slot_2),
+                slot_3 = VALUES(slot_3),
+                slot_4 = VALUES(slot_4)
+        ");
+        $stmt->execute([$program, $day, $slot_1, $slot_2, $slot_3, $slot_4]);
+        echo json_encode(['success' => true, 'message' => "Timetable for $program ($day) updated successfully."]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to save timetable settings: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+// 20. Daily Lectures Override Handlers
+if ($route === 'daily-lectures' && $method === 'GET') {
+    $date = $_GET['date'] ?? '';
+    $program = $_GET['program'] ?? '';
+    $division = $_GET['division'] ?? '';
+    if (!$date) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Date (YYYY-MM-DD) is required.']);
+        exit;
+    }
+    
+    if ($program && $division) {
+        $stmt = $pdo->prepare('SELECT * FROM daily_lectures WHERE date = ? AND program = ? AND division = ?');
+        $stmt->execute([$date, $program, $division]);
+    } else if ($program) {
+        $stmt = $pdo->prepare('SELECT * FROM daily_lectures WHERE date = ? AND program = ?');
+        $stmt->execute([$date, $program]);
+    } else {
+        $stmt = $pdo->prepare('SELECT * FROM daily_lectures WHERE date = ?');
+        $stmt->execute([$date]);
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'lectures' => $rows]);
+    exit;
+}
+
+if ($route === 'daily-lectures/save' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $date = $input['date'] ?? '';
+    $program = $input['program'] ?? '';
+    $division = $input['division'] ?? '';
+    $slot = $input['slot'] ?? '';
+    $subject = $input['subject'] ?? '';
+    $original_teacher = $input['original_teacher'] ?? '';
+    $status = $input['status'] ?? '';
+    $substitute_teacher = $input['substitute_teacher'] ?? '';
+    $combined_division = $input['combined_division'] ?? '';
+    $notes = $input['notes'] ?? '';
+    
+    if (!$date || !$program || !$division || !$slot || !$status) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required override parameters.']);
+        exit;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO daily_lectures (date, program, division, slot, subject, original_teacher, status, substitute_teacher, combined_division, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                subject = VALUES(subject),
+                original_teacher = VALUES(original_teacher),
+                status = VALUES(status),
+                substitute_teacher = VALUES(substitute_teacher),
+                combined_division = VALUES(combined_division),
+                notes = VALUES(notes)
+        ");
+        $stmt->execute([$date, $program, $division, $slot, $subject, $original_teacher, $status, $substitute_teacher, $combined_division, $notes]);
+        echo json_encode(['success' => true, 'message' => 'Lecture adjustment updated successfully.']);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to save lecture override.']);
+    }
+    exit;
+}
+
+if ($route === 'daily-lectures/delete' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Adjustment ID is required.']);
+        exit;
+    }
+    $pdo->prepare('DELETE FROM daily_lectures WHERE id = ?')->execute([$id]);
+    echo json_encode(['success' => true, 'message' => 'Lecture adjustment reverted to default.']);
+    exit;
+}
+
+// 21. Courses & Syllabus Handlers
+if ($route === 'courses' && $method === 'GET') {
+    $program = $_GET['program'] ?? '';
+    if ($program) {
+        $stmt = $pdo->prepare('SELECT * FROM courses WHERE program = ?');
+        $stmt->execute([$program]);
+    } else {
+        $stmt = $pdo->query('SELECT * FROM courses');
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'courses' => $rows]);
+    exit;
+}
+
+if ($route === 'courses/save' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $code = $input['code'] ?? '';
+    $name = $input['name'] ?? '';
+    $program = $input['program'] ?? '';
+    $syllabus = $input['syllabus'] ?? '';
+    
+    if (!$code || !$name || !$program) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required course fields.']);
+        exit;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO courses (code, name, program, syllabus)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                name = VALUES(name),
+                program = VALUES(program),
+                syllabus = VALUES(syllabus)
+        ");
+        $stmt->execute([$code, $name, $program, $syllabus]);
+        echo json_encode(['success' => true, 'message' => 'Course details saved successfully.']);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to save course details.']);
+    }
+    exit;
+}
+
+// 22. Assignments Handlers
+if ($route === 'assignments' && $method === 'GET') {
+    $program = $_GET['program'] ?? '';
+    $class_name = $_GET['class_name'] ?? '';
+    if ($program && $class_name) {
+        $stmt = $pdo->prepare('SELECT * FROM assignments WHERE program = ? AND class_name = ?');
+        $stmt->execute([$program, $class_name]);
+    } else if ($program) {
+        $stmt = $pdo->prepare('SELECT * FROM assignments WHERE program = ?');
+        $stmt->execute([$program]);
+    } else {
+        $stmt = $pdo->query('SELECT * FROM assignments');
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'assignments' => $rows]);
+    exit;
+}
+
+if ($route === 'assignments/upload' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $title = $input['title'] ?? '';
+    $description = $input['description'] ?? '';
+    $due_date = $input['due_date'] ?? '';
+    $file_name = $input['file_name'] ?? '';
+    $file_data = $input['file_data'] ?? '';
+    $program = $input['program'] ?? '';
+    $class_name = $input['class_name'] ?? '';
+    $subject = $input['subject'] ?? '';
+    
+    if (!$title || !$due_date || !$program || !$class_name || !$subject) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required assignment fields.']);
+        exit;
+    }
+    
+    $filePath = null;
+    if ($file_name && $file_data) {
+        try {
+            $base64Data = preg_replace('/^data:.*;base64,/', '', $file_data);
+            $uploads_dir = __DIR__ . '/uploads';
+            if (!is_dir($uploads_dir)) {
+                mkdir($uploads_dir, 0755, true);
+            }
+            $cleanFileName = time() . '_' . basename($file_name);
+            $fullPath = $uploads_dir . '/' . $cleanFileName;
+            file_put_contents($fullPath, base64_decode($base64Data));
+            $filePath = '/uploads/' . $cleanFileName;
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to save uploaded attachment.']);
+            exit;
+        }
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO assignments (title, description, due_date, file_name, file_path, program, class_name, subject)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$title, $description, $due_date, $file_name ? $file_name : null, $filePath, $program, $class_name, $subject]);
+        echo json_encode(['success' => true, 'message' => 'Assignment uploaded successfully.']);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to create assignment record: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($route === 'assignments/delete' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Assignment ID is required.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare('SELECT file_path FROM assignments WHERE id = ?');
+    $stmt->execute([$id]);
+    $item = $stmt->fetch();
+    if ($item && $item['file_path']) {
+        $fullPath = __DIR__ . $item['file_path'];
+        if (file_exists($fullPath)) {
+            @unlink($fullPath);
+        }
+    }
+    $pdo->prepare('DELETE FROM assignments WHERE id = ?')->execute([$id]);
+    echo json_encode(['success' => true, 'message' => 'Assignment deleted successfully.']);
+    exit;
+}
+
+// 23. Study Materials Handlers
+if ($route === 'study-materials' && $method === 'GET') {
+    $program = $_GET['program'] ?? '';
+    $class_name = $_GET['class_name'] ?? '';
+    if ($program && $class_name) {
+        $stmt = $pdo->prepare('SELECT * FROM study_materials WHERE program = ? AND class_name = ?');
+        $stmt->execute([$program, $class_name]);
+    } else if ($program) {
+        $stmt = $pdo->prepare('SELECT * FROM study_materials WHERE program = ?');
+        $stmt->execute([$program]);
+    } else {
+        $stmt = $pdo->query('SELECT * FROM study_materials');
+    }
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'materials' => $rows]);
+    exit;
+}
+
+if ($route === 'study-materials/upload' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $title = $input['title'] ?? '';
+    $description = $input['description'] ?? '';
+    $file_name = $input['file_name'] ?? '';
+    $file_data = $input['file_data'] ?? '';
+    $program = $input['program'] ?? '';
+    $class_name = $input['class_name'] ?? '';
+    $subject = $input['subject'] ?? '';
+    
+    if (!$title || !$program || !$class_name || !$subject) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required fields.']);
+        exit;
+    }
+    
+    $filePath = null;
+    if ($file_name && $file_data) {
+        try {
+            $base64Data = preg_replace('/^data:.*;base64,/', '', $file_data);
+            $uploads_dir = __DIR__ . '/uploads';
+            if (!is_dir($uploads_dir)) {
+                mkdir($uploads_dir, 0755, true);
+            }
+            $cleanFileName = time() . '_' . basename($file_name);
+            $fullPath = $uploads_dir . '/' . $cleanFileName;
+            file_put_contents($fullPath, base64_decode($base64Data));
+            $filePath = '/uploads/' . $cleanFileName;
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to save uploaded attachment.']);
+            exit;
+        }
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO study_materials (title, description, file_name, file_path, program, class_name, subject)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([$title, $description, $file_name ? $file_name : null, $filePath, $program, $class_name, $subject]);
+        echo json_encode(['success' => true, 'message' => 'Study material uploaded successfully.']);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to create study material record.']);
+    }
+    exit;
+}
+
+if ($route === 'study-materials/delete' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Material ID is required.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare('SELECT file_path FROM study_materials WHERE id = ?');
+    $stmt->execute([$id]);
+    $item = $stmt->fetch();
+    if ($item && $item['file_path']) {
+        $fullPath = __DIR__ . $item['file_path'];
+        if (file_exists($fullPath)) {
+            @unlink($fullPath);
+        }
+    }
+    $pdo->prepare('DELETE FROM study_materials WHERE id = ?')->execute([$id]);
+    echo json_encode(['success' => true, 'message' => 'Study material deleted successfully.']);
+    exit;
+}
+
+// 24. Marks Registry Handlers
+if (preg_match('/^marks\/([^\/]+)$/', $route, $matches)) {
+    $student_id = $matches[1];
+    $stmt = $pdo->prepare("
+        SELECT m.id, m.subject, m.exam_name, m.marks_obtained, m.marks_total, u.name as student_name
+        FROM marks_registry m
+        JOIN users u ON m.student_id = u.id
+        WHERE m.student_id = ?
+    ");
+    $stmt->execute([$student_id]);
+    $rows = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'marks' => $rows]);
+    exit;
+}
+
+if ($route === 'marks/save' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $student_id = $input['student_id'] ?? '';
+    $subject = $input['subject'] ?? '';
+    $exam_name = $input['exam_name'] ?? '';
+    $marks_obtained = $input['marks_obtained'] ?? 0;
+    $marks_total = $input['marks_total'] ?? 0;
+    
+    if (!$student_id || !$subject || !$exam_name || $marks_obtained === null || !$marks_total) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required marks fields.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare('SELECT id FROM marks_registry WHERE student_id = ? AND subject = ? AND exam_name = ?');
+    $stmt->execute([$student_id, $subject, $exam_name]);
+    $existing = $stmt->fetch();
+    
+    if ($existing) {
+        $pdo->prepare('UPDATE marks_registry SET marks_obtained = ?, marks_total = ? WHERE id = ?')
+             ->execute([(int)$marks_obtained, (int)$marks_total, $existing['id']]);
+    } else {
+        $pdo->prepare('INSERT INTO marks_registry (student_id, subject, exam_name, marks_obtained, marks_total) VALUES (?, ?, ?, ?, ?)')
+             ->execute([$student_id, $subject, $exam_name, (int)$marks_obtained, (int)$marks_total]);
+    }
+    echo json_encode(['success' => true, 'message' => 'Marks saved successfully.']);
+    exit;
+}
+
+// 25. Settings Handlers (Drive, Fees, Profile Edit Permissions)
+if ($route === 'settings/drive' && $method === 'GET') {
+    $stmt = $pdo->prepare("SELECT value FROM settings WHERE key_name = 'google_drive_script_url'");
+    $stmt->execute();
+    $row = $stmt->fetch();
+    echo json_encode(['success' => true, 'url' => $row ? $row['value'] : '']);
+    exit;
+}
+
+if ($route === 'settings/drive' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $url = $input['url'] ?? '';
+    $stmt = $pdo->prepare("
+        INSERT INTO settings (key_name, value) VALUES ('google_drive_script_url', ?)
+        ON DUPLICATE KEY UPDATE value = VALUES(value)
+    ");
+    $stmt->execute([$url]);
+    echo json_encode(['success' => true, 'message' => 'Drive settings saved.']);
+    exit;
+}
+
+if ($route === 'settings/fees' && $method === 'GET') {
+    $stmt = $pdo->query('SELECT * FROM settings');
+    $rows = $stmt->fetchAll();
+    $settingsMap = [];
+    foreach ($rows as $r) {
+        $settingsMap[$r['key_name']] = $r['value'];
+    }
+    echo json_encode([
+        'success' => true,
+        'fees' => [
+            'fee_baseline_bcom_regular_boy' => $settingsMap['fee_baseline_bcom_regular_boy'] ?? '6200',
+            'fee_baseline_bcom_regular_girl' => $settingsMap['fee_baseline_bcom_regular_girl'] ?? '5200',
+            'fee_baseline_bcom_professional_boy' => $settingsMap['fee_baseline_bcom_professional_boy'] ?? '9500',
+            'fee_baseline_bcom_professional_girl' => $settingsMap['fee_baseline_bcom_professional_girl'] ?? '8500',
+            'fee_baseline_mcom_boy' => $settingsMap['fee_baseline_mcom_boy'] ?? '12000',
+            'fee_baseline_mcom_girl' => $settingsMap['fee_baseline_mcom_girl'] ?? '11000',
+            'fee_penalty' => $settingsMap['fee_penalty'] ?? '150'
+        ]
+    ]);
+    exit;
+}
+
+if ($route === 'settings/fees' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $fees = $input['fees'] ?? null;
+    if (!$fees) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing fees settings object.']);
+        exit;
+    }
+    
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO settings (key_name, value) VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE value = VALUES(value)
+        ");
+        foreach ($fees as $key => $val) {
+            $stmt->execute([$key, strval($val)]);
+        }
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'Fees baseline configuration saved successfully.']);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to save fees configuration.']);
+    }
+    exit;
+}
+
+if ($route === 'settings/profile-permissions' && $method === 'GET') {
+    $stmt = $pdo->query('SELECT * FROM settings');
+    $rows = $stmt->fetchAll();
+    $settingsMap = [];
+    foreach ($rows as $r) {
+        $settingsMap[$r['key_name']] = $r['value'];
+    }
+    echo json_encode([
+        'success' => true,
+        'allow_student_profile_edit' => ($settingsMap['allow_student_profile_edit'] ?? '') !== 'false',
+        'allow_teacher_profile_edit' => ($settingsMap['allow_teacher_profile_edit'] ?? '') !== 'false'
+    ]);
+    exit;
+}
+
+if ($route === 'settings/profile-permissions' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $allow_student_profile_edit = $input['allow_student_profile_edit'] ?? true;
+    $allow_teacher_profile_edit = $input['allow_teacher_profile_edit'] ?? true;
+    
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO settings (key_name, value) VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE value = VALUES(value)
+        ");
+        $stmt->execute(['allow_student_profile_edit', $allow_student_profile_edit ? 'true' : 'false']);
+        $stmt->execute(['allow_teacher_profile_edit', $allow_teacher_profile_edit ? 'true' : 'false']);
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'Profile edit permissions saved successfully.']);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to save permissions.']);
+    }
+    exit;
+}
+
+// 26. Admin User Management Handlers (add, edit, delete)
+if ($route === 'users/add' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $username = $input['username'] ?? '';
+    $password = $input['password'] ?? '';
+    $role = $input['role'] ?? 'student';
+    $name = $input['name'] ?? '';
+    $email = $input['email'] ?? null;
+    $phone = $input['phone'] ?? null;
+    $division = $input['division'] ?? 'A';
+    $class_name = $input['class_name'] ?? '';
+    $department = $input['department'] ?? 'B.Com (NEP)';
+    $program = $input['program'] ?? 'B.Com (Regular)';
+    $year = $input['year'] ?? '1st Year';
+    $semester = $input['semester'] ?? 'Semester 1';
+    $gender = $input['gender'] ?? 'Male';
+    $subject = $input['subject'] ?? null;
+    
+    if (!$username || !$password || !$role || !$name) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Username, Password, Role, and Name are required.']);
+        exit;
+    }
+    
+    $finalProgram = $program;
+    $finalSemester = $semester;
+    $finalGender = $gender;
+    if ($role === 'student') {
+        if ($class_name) {
+            if (strpos($class_name, 'Sem-I') !== false || strpos($class_name, 'Sem 1') !== false) { $finalSemester = 'Semester 1'; }
+            else if (strpos($class_name, 'Sem-III') !== false) { $finalSemester = 'Semester 3'; }
+            else if (strpos($class_name, 'Sem-V') !== false) { $finalSemester = 'Semester 5'; }
+            
+            if (strpos($class_name, 'Prof') !== false) { $finalProgram = 'B.Com (Professional)'; }
+            else if (strpos($class_name, 'M.Com') !== false || strpos($class_name, 'MCom') !== false) { $finalProgram = 'M.Com'; }
+            else { $finalProgram = 'B.Com (Regular)'; }
+        }
+    }
+    
+    $finalClass = $class_name ?: 'B.Com. Sem-I';
+    if ($role === 'student') {
+        if ($finalProgram === 'B.Com (Professional)') {
+            if ($finalSemester === 'Semester 1') $finalClass = 'B.Com. Prof. Sem-I';
+            else if ($finalSemester === 'Semester 3') $finalClass = 'B.Com. Prof. Sem-III';
+            else if ($finalSemester === 'Semester 5') $finalClass = 'B.Com. Prof. Sem-V';
+        } else if ($finalProgram === 'M.Com') {
+            if ($finalSemester === 'Semester 1') $finalClass = 'M.Com. Sem-I';
+            else if ($finalSemester === 'Semester 3') $finalClass = 'M.Com. Sem-III';
+        } else {
+            if ($finalSemester === 'Semester 1') $finalClass = 'B.Com. Sem-I';
+            else if ($finalSemester === 'Semester 3') $finalClass = 'B.Com. Sem-III';
+            else if ($finalSemester === 'Semester 5') $finalClass = 'B.Com. Sem-V';
+        }
+    }
+    
+    $feeDue = 0;
+    $feeTotal = 0;
+    if ($role === 'student') {
+        $progLower = strtolower($finalProgram);
+        $genderLower = strtolower($finalGender);
+        if (strpos($progLower, 'professional') !== false) {
+            $feeDue = ($genderLower === 'female') ? 8500 : 9500;
+        } else if (strpos($progLower, 'm.com') !== false || strpos($progLower, 'mcom') !== false) {
+            $feeDue = ($genderLower === 'female') ? 11000 : 12000;
+        } else {
+            $feeDue = ($genderLower === 'female') ? 5200 : 6200;
+        }
+        $feeTotal = $feeDue;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO users (username, password, role, name, email, phone, division, class, department, program, year, semester, gender, fee_due, fee_paid, fee_total, subject)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        ");
+        $stmt->execute([
+            $username, $password, $role, $name, $email, $phone, 
+            $division, $finalClass, $department, $finalProgram, $year, $finalSemester, $gender, $feeDue, $feeTotal, $subject
+        ]);
+        echo json_encode(['success' => true, 'message' => 'User added successfully.']);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to add user. Username may already exist.']);
+    }
+    exit;
+}
+
+if ($route === 'users/edit' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    $username = $input['username'] ?? '';
+    $name = $input['name'] ?? '';
+    $email = $input['email'] ?? null;
+    $phone = $input['phone'] ?? null;
+    $division = $input['division'] ?? 'A';
+    $class_name = $input['class_name'] ?? '';
+    $department = $input['department'] ?? 'B.Com (NEP)';
+    $program = $input['program'] ?? 'B.Com (Regular)';
+    $year = $input['year'] ?? '1st Year';
+    $semester = $input['semester'] ?? 'Semester 1';
+    $gender = $input['gender'] ?? 'Male';
+    $password = $input['password'] ?? '';
+    $subject = $input['subject'] ?? null;
+    
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'User ID is required.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT role, username, program, semester, class FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    $existing = $stmt->fetch();
+    if (!$existing) {
+        http_response_code(404);
+        echo json_encode(['error' => 'User not found.']);
+        exit;
+    }
+    
+    $finalRole = $existing['role'];
+    $finalProgram = $program ?: ($existing['program'] ?: 'B.Com (Regular)');
+    $finalSemester = $semester ?: ($existing['semester'] ?: 'Semester 1');
+    $finalClass = $class_name;
+    
+    if ($finalRole === 'student') {
+        if ($finalProgram === 'B.Com (Professional)') {
+            if ($finalSemester === 'Semester 1') $finalClass = 'B.Com. Prof. Sem-I';
+            else if ($finalSemester === 'Semester 3') $finalClass = 'B.Com. Prof. Sem-III';
+            else if ($finalSemester === 'Semester 5') $finalClass = 'B.Com. Prof. Sem-V';
+        } else if ($finalProgram === 'M.Com') {
+            if ($finalSemester === 'Semester 1') $finalClass = 'M.Com. Sem-I';
+            else if ($finalSemester === 'Semester 3') $finalClass = 'M.Com. Sem-III';
+        } else {
+            if ($finalSemester === 'Semester 1') $finalClass = 'B.Com. Sem-I';
+            else if ($finalSemester === 'Semester 3') $finalClass = 'B.Com. Sem-III';
+            else if ($finalSemester === 'Semester 5') $finalClass = 'B.Com. Sem-V';
+        }
+    } else {
+        $finalClass = $finalClass ?: ($existing['class'] ?: 'B.Com. Sem-I');
+    }
+    
+    $finalUsername = $username ? trim($username) : $existing['username'];
+    
+    if ($finalUsername !== $existing['username']) {
+        $stmt = $pdo->prepare("SELECT count(*) as count FROM users WHERE username = ?");
+        $stmt->execute([$finalUsername]);
+        $dup = $stmt->fetch();
+        if ($dup && (int)$dup['count'] > 0) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Username already taken by another account.']);
+            exit;
+        }
+    }
+    
+    $query = "UPDATE users SET username = ?, name = ?, email = ?, phone = ?, division = ?, class = ?, department = ?, program = ?, year = ?, semester = ?, gender = ?, subject = ?";
+    $params = [$finalUsername, $name, $email, $phone, $division, $finalClass, $department, $finalProgram, $year, $finalSemester, $gender, $subject];
+    
+    if ($password && trim($password) !== '') {
+        $query .= ", password = ?";
+        $params[] = trim($password);
+    }
+    
+    $query .= " WHERE id = ?";
+    $params[] = $id;
+    
+    try {
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
+        echo json_encode(['success' => true, 'message' => 'User updated successfully.']);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to update user.']);
+    }
+    exit;
+}
+
+if ($route === 'users/delete' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'User ID is required.']);
+        exit;
+    }
+    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+    echo json_encode(['success' => true, 'message' => 'User deleted successfully.']);
+    exit;
+}
+
+// 27. Diagnostics & Admin Maintenance Handlers
+if ($route === 'diagnostics' && $method === 'GET') {
+    $mysqlVer = $pdo->query('select version()')->fetchColumn();
+    echo json_encode([
+        'success' => true,
+        'status' => 'healthy',
+        'database' => 'connected',
+        'mysql_version' => $mysqlVer,
+        'php_version' => PHP_VERSION,
+        'uploads_directory' => is_dir(__DIR__ . '/uploads') ? 'writable' : 'missing'
+    ]);
+    exit;
+}
+
+if ($route === 'admin/clean-storage' && $method === 'POST') {
+    $activeFiles = [];
+    $stmt = $pdo->query("SELECT file_path FROM assignments WHERE file_path IS NOT NULL");
+    while ($path = $stmt->fetchColumn()) {
+        $activeFiles[] = basename($path);
+    }
+    $stmt = $pdo->query("SELECT file_path FROM study_materials WHERE file_path IS NOT NULL");
+    while ($path = $stmt->fetchColumn()) {
+        $activeFiles[] = basename($path);
+    }
+    
+    $cleanedCount = 0;
+    $uploads_dir = __DIR__ . '/uploads';
+    if (is_dir($uploads_dir)) {
+        $files = scandir($uploads_dir);
+        foreach ($files as $f) {
+            if ($f === '.' || $f === '..') continue;
+            if (!in_array($f, $activeFiles)) {
+                @unlink($uploads_dir . '/' . $f);
+                $cleanedCount++;
+            }
+        }
+    }
+    echo json_encode(['success' => true, 'message' => "Storage cleaned successfully. Deleted $cleanedCount orphan files."]);
+    exit;
+}
+
+if ($route === 'admin/delete-file' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $file_path = $input['file_path'] ?? '';
+    if ($file_path) {
+        $fullPath = __DIR__ . $file_path;
+        if (file_exists($fullPath)) {
+            @unlink($fullPath);
+            echo json_encode(['success' => true, 'message' => 'File deleted successfully.']);
+            exit;
+        }
+    }
+    http_response_code(400);
+    echo json_encode(['error' => 'File not found.']);
+    exit;
+}
+
+if ($route === 'admin/clear-database' && $method === 'POST') {
+    $pdo->beginTransaction();
+    try {
+        $pdo->query("DELETE FROM attendance_records");
+        $pdo->query("DELETE FROM attendance_sessions");
+        $pdo->query("DELETE FROM daily_lectures");
+        $pdo->query("DELETE FROM marks_registry");
+        $pdo->query("DELETE FROM study_materials");
+        $pdo->query("DELETE FROM assignments");
+        $pdo->query("DELETE FROM notices");
+        $pdo->query("DELETE FROM timetables");
+        $pdo->query("DELETE FROM users WHERE role != 'admin'");
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'All database transaction records and student/faculty profiles cleared. System reverted to original clean state.']);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to clear database.']);
+    }
+    exit;
+}
+
+if ($route === 'sql' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $query = $input['query'] ?? '';
+    if (!$query) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Query parameter is required.']);
+        exit;
+    }
+    
+    $lower = strtolower($query);
+    if (strpos($lower, 'drop') !== false || strpos($lower, 'truncate') !== false) {
+        http_response_code(403);
+        echo json_encode(['error' => 'DROP or TRUNCATE commands are prohibited.']);
+        exit;
+    }
+    
+    try {
+        $stmt = $pdo->query($query);
+        if (strpos($lower, 'select') === 0 || strpos($lower, 'show') === 0 || strpos($lower, 'describe') === 0 || strpos($lower, 'explain') === 0) {
+            $rows = $stmt->fetchAll();
+            echo json_encode(['success' => true, 'results' => $rows]);
+        } else {
+            echo json_encode(['success' => true, 'affected_rows' => $stmt->rowCount()]);
+        }
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// 28. Student Active Checkin & Attendance History Handlers
+if (preg_match('/^attendance\/student\/([^\/]+)\/active-checkin$/', $route, $matches)) {
+    $studentId = $matches[1];
+    $now = date('Y-m-d H:i:s');
+    
+    $stmt = $pdo->prepare("
+        SELECT r.*, s.subject, s.created_at as session_start
+        FROM attendance_records r
+        JOIN attendance_sessions s ON r.session_id = s.id
+        WHERE r.student_id = ? AND s.is_active = 1 AND s.expires_at > ?
+    ");
+    $stmt->execute([$studentId, $now]);
+    $record = $stmt->fetch();
+    
+    if ($record) {
+        echo json_encode(['success' => true, 'active' => true, 'record' => $record]);
+    } else {
+        echo json_encode(['success' => true, 'active' => false]);
+    }
+    exit;
+}
+
+if (preg_match('/^attendance\/student\/([^\/]+)\/history$/', $route, $matches)) {
+    $studentId = $matches[1];
+    $stmt = $pdo->prepare("
+        SELECT r.marked_at, s.subject, s.class_name, s.code, r.status
+        FROM attendance_records r
+        JOIN attendance_sessions s ON r.session_id = s.id
+        WHERE r.student_id = ?
+        ORDER BY r.marked_at DESC
+    ");
+    $stmt->execute([$studentId]);
+    $records = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'records' => $records]);
+    exit;
+}
+
+if ($route === 'attendance/history' && $method === 'GET') {
+    $creator_id = $_GET['creator_id'] ?? null;
+    $sql = "
+        SELECT r.id, r.marked_at, u.username as roll_no, u.name as student_name, 
+               u.gender, u.program, u.class as student_class, u.division as student_division,
+               s.subject, s.class_name as session_class, s.division as session_division,
+               s.code as session_code, t.name as teacher_name
+        FROM attendance_records r
+        JOIN users u ON r.student_id = u.id
+        JOIN attendance_sessions s ON r.session_id = s.id
+        JOIN users t ON s.creator_id = t.id
+    ";
+    $params = [];
+    if ($creator_id) {
+        $sql .= " WHERE s.creator_id = ? ";
+        $params[] = (int)$creator_id;
+    }
+    $sql .= " ORDER BY r.marked_at DESC ";
+    
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $records = $stmt->fetchAll();
+    echo json_encode(['success' => true, 'records' => $records]);
+    exit;
+}
+
+// 29. Profile Modification & Session Control Handlers
+if ($route === 'student/update-profile' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    $email = $input['email'] ?? '';
+    $phone = $input['phone'] ?? '';
+    
+    if (!$id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Student ID is required.']);
+        exit;
+    }
+    
+    $permStmt = $pdo->query("SELECT value FROM settings WHERE key_name = 'allow_student_profile_edit'");
+    $allow = $permStmt->fetchColumn();
+    if ($allow === 'false') {
+        http_response_code(403);
+        echo json_encode(['error' => 'Profile editing is disabled by college administrator.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("UPDATE users SET email = ?, phone = ? WHERE id = ?");
+    $stmt->execute([$email, $phone, $id]);
+    
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    $user = $stmt->fetch();
+    
+    echo json_encode(['success' => true, 'message' => 'Profile updated successfully.', 'user' => $user]);
+    exit;
+}
+
+if ($route === 'student/update-password' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $id = $input['id'] ?? null;
+    $current_password = $input['current_password'] ?? '';
+    $new_password = $input['new_password'] ?? '';
+    
+    if (!$id || !$current_password || !$new_password) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing password parameters.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
+    $stmt->execute([$id]);
+    $cur = $stmt->fetchColumn();
+    
+    if ($cur !== $current_password) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Incorrect current password.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+    $stmt->execute([$new_password, $id]);
+    echo json_encode(['success' => true, 'message' => 'Password updated successfully.']);
+    exit;
+}
+
+if ($route === 'attendance/create' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $creator_id = $input['creator_id'] ?? null;
+    $class_name = $input['class_name'] ?? '';
+    $subject = $input['subject'] ?? '';
+    $division = $input['division'] ?? '';
+    $program = $input['program'] ?? '';
+    $duration_minutes = $input['duration_minutes'] ?? 10;
+    $require_gps = $input['require_gps'] ?? false;
+    $creator_lat = $input['creator_lat'] ?? null;
+    $creator_lon = $input['creator_lon'] ?? null;
+    $is_rolling = $input['is_rolling'] ?? false;
+    $geofence_radius = $input['geofence_radius'] ?? 50;
+    $lecture_slot = $input['lecture_slot'] ?? 'Lecture 1';
+    
+    if (!$creator_id || !$class_name || !$subject || !$division || !$program) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing required session parameters.']);
+        exit;
+    }
+    
+    $code = (string)rand(100000, 999999);
+    $expiresAt = date('Y-m-d H:i:s', time() + ($duration_minutes * 60));
+    $secretKey = strtoupper(substr(md5(uniqid(rand(), true)), 0, 8));
+    
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO attendance_sessions (code, creator_id, class_name, subject, division, program, expires_at, require_gps, creator_lat, creator_lon, is_rolling, geofence_radius, lecture_slot, secret_key, duration_minutes, status, verification_started)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 0)
+        ");
+        $stmt->execute([
+            $code, $creator_id, $class_name, $subject, $division, $program, $expiresAt,
+            $require_gps ? 1 : 0, $creator_lat, $creator_lon, $is_rolling ? 1 : 0, $geofence_radius, $lecture_slot,
+            $secretKey, $duration_minutes
+        ]);
+        $sessionId = $pdo->lastInsertId();
+        
+        $stmt = $pdo->prepare("SELECT * FROM attendance_sessions WHERE id = ?");
+        $stmt->execute([$sessionId]);
+        $sess = $stmt->fetch();
+        
+        echo json_encode(['success' => true, 'session' => $sess]);
+    } catch (Exception $e) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Failed to create active session: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($route === 'attendance/session/violate' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $session_id = $input['session_id'] ?? null;
+    $student_id = $input['student_id'] ?? null;
+    $violation_type = $input['violation_type'] ?? 'tab_focus_lost';
+    
+    if (!$session_id || !$student_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing parameters.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ?");
+    $stmt->execute([$session_id, $student_id]);
+    $rec = $stmt->fetch();
+    
+    if ($rec) {
+        $count = (int)$rec['violations_count'] + 1;
+        $logs = $rec['violation_logs'] ? json_decode($rec['violation_logs'], true) : [];
+        $logs[] = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'type' => $violation_type
+        ];
+        
+        $pdo->prepare("UPDATE attendance_records SET violations_count = ?, violation_logs = ? WHERE id = ?")
+             ->execute([$count, json_encode($logs), $rec['id']]);
+             
+        echo json_encode(['success' => true, 'violations_count' => $count]);
+    } else {
+        http_response_code(404);
+        echo json_encode(['error' => 'Record not found.']);
+    }
+    exit;
+}
+
+if ($route === 'attendance/session/start-verification' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $code = $input['code'] ?? '';
+    
+    if (!$code) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Code parameter is required.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM attendance_sessions WHERE code = ? AND is_active = 1");
+    $stmt->execute([$code]);
+    $sess = $stmt->fetch();
+    
+    if (!$sess) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Active session not found.']);
+        exit;
+    }
+    
+    $code2 = (string)rand(100000, 999999);
+    $pdo->prepare("UPDATE attendance_sessions SET verification_started = 1, code2 = ? WHERE id = ?")
+         ->execute([$code2, $sess['id']]);
+         
+    echo json_encode(['success' => true, 'code2' => $code2]);
+    exit;
+}
+
+if ($route === 'attendance/session/rotate' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $code = $input['code'] ?? '';
+    
+    if (!$code) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Code parameter is required.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM attendance_sessions WHERE code = ? AND is_active = 1");
+    $stmt->execute([$code]);
+    $sess = $stmt->fetch();
+    
+    if (!$sess) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Active session not found.']);
+        exit;
+    }
+    
+    $newCode = (string)rand(100000, 999999);
+    $pdo->prepare("UPDATE attendance_sessions SET code = ? WHERE id = ?")->execute([$newCode, $sess['id']]);
+    echo json_encode(['success' => true, 'new_code' => $newCode]);
+    exit;
+}
+
+if ($route === 'attendance/verify-code2' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $code2 = $input['code2'] ?? '';
+    $student_id = $input['student_id'] ?? null;
+    
+    if (!$code2 || !$student_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Code2 and Student ID are required.']);
+        exit;
+    }
+    
+    $now = date('Y-m-d H:i:s');
+    $stmt = $pdo->prepare("
+        SELECT * FROM attendance_sessions 
+        WHERE code2 = ? AND is_active = 1 AND expires_at > ?
+    ");
+    $stmt->execute([$code2, $now]);
+    $sess = $stmt->fetch();
+    
+    if (!$sess) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Incorrect verification code or session has expired.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ?");
+    $stmt->execute([$sess['id'], $student_id]);
+    $rec = $stmt->fetch();
+    
+    if (!$rec) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Check-in record not found for this session.']);
+        exit;
+    }
+    
+    $pdo->prepare("UPDATE attendance_records SET status = 'present' WHERE id = ?")->execute([$rec['id']]);
+    echo json_encode(['success' => true, 'message' => 'Verification successful! Attendance marked.']);
+    exit;
+}
+
+if ($route === 'attendance/check-in' && $method === 'POST') {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $code = $input['code'] ?? '';
+    $student_id = $input['student_id'] ?? null;
+    $device_id = $input['device_id'] ?? '';
+    $student_lat = $input['student_lat'] ?? null;
+    $student_lon = $input['student_lon'] ?? null;
+    $student_accuracy = $input['student_accuracy'] ?? 0;
+    
+    if (!$code || !$student_id || !$device_id) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Missing code, student_id, or device_id.']);
+        exit;
+    }
+    
+    $now = date('Y-m-d H:i:s');
+    $session = null;
+    
+    if (strpos($code, ':') !== false) {
+        $parts = explode(':', $code);
+        $sessionId = (int)$parts[0];
+        $hash = $parts[1];
+        
+        $stmt = $pdo->prepare("
+            SELECT * FROM attendance_sessions 
+            WHERE id = ? AND is_active = 1 AND expires_at > ?
+        ");
+        $stmt->execute([$sessionId, $now]);
+        $s = $stmt->fetch();
+        
+        if ($s && $s['secret_key']) {
+            $timeWindow = floor(time() / 15);
+            $expectedCurrent = get15SecondHash($s['secret_key'], $timeWindow);
+            $expectedPrev = get15SecondHash($s['secret_key'], $timeWindow - 1);
+            if ($hash === $expectedCurrent || $hash === $expectedPrev) {
+                $session = $s;
+            } else {
+                http_response_code(400);
+                echo json_encode(['error' => 'Attendance QR Code has expired. Please scan the updated QR Code.']);
+                exit;
+            }
+        }
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT * FROM attendance_sessions 
+            WHERE code = ? AND is_active = 1 AND expires_at > ?
+        ");
+        $stmt->execute([$code, $now]);
+        $session = $stmt->fetch();
+    }
+    
+    if (!$session) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Invalid, closed, or expired attendance code.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM attendance_records WHERE session_id = ? AND device_id = ?");
+    $stmt->execute([$session['id'], $device_id]);
+    if ($stmt->fetch()) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Security Alert: This device has already marked attendance for another student. Proxy attendance is strictly prohibited.']);
+        exit;
+    }
+    
+    if ($session['require_gps']) {
+        if ($student_lat === null || $student_lon === null) {
+            http_response_code(400);
+            echo json_encode(['error' => 'GPS Geofencing is enabled. You must share your location coordinates to complete check-in.']);
+            exit;
+        }
+        
+        $CAMPUS_LAT = 23.0765;
+        $CAMPUS_LON = 70.1537;
+        
+        $refLat = $CAMPUS_LAT;
+        $refLon = $CAMPUS_LON;
+        $targetName = "the college campus";
+        
+        if ($session['creator_lat'] !== null && $session['creator_lon'] !== null) {
+            $refLat = (double)$session['creator_lat'];
+            $refLon = (double)$session['creator_lon'];
+            $targetName = "the instructor's device";
+        }
+        
+        $distance = getDistanceKm($refLat, $refLon, $student_lat, $student_lon);
+        $distanceMeters = $distance * 1000;
+        $radiusMeters = (int)$session['geofence_radius'] ?: 50;
+        
+        $errorMargin = min((double)$student_accuracy, 30.0);
+        $adjustedDistance = max(0.0, $distanceMeters - $errorMargin);
+        
+        if ($adjustedDistance > $radiusMeters) {
+            http_response_code(403);
+            echo json_encode(['error' => "Geofencing failure. You must be in close proximity to $targetName (within {$radiusMeters}m) to check in. (Calculated distance: " . round($distanceMeters) . "m, error margin: -" . round($errorMargin) . "m)."]);
+            exit;
+        }
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND role = 'student'");
+    $stmt->execute([$student_id]);
+    $student = $stmt->fetch();
+    
+    if (!$student) {
+        http_response_code(404);
+        echo json_encode(['error' => 'Student record not found.']);
+        exit;
+    }
+    
+    if ($session['program'] && $session['program'] !== $student['program']) {
+        http_response_code(403);
+        echo json_encode(['error' => "Program mismatch. This code is only for {$session['program']}, but you are in {$student['program']}."]);
+        exit;
+    }
+    
+    if ($session['class_name'] && strpos($student['class'], $session['class_name']) !== 0) {
+        http_response_code(403);
+        echo json_encode(['error' => "Class/Semester mismatch. This session is for {$session['class_name']}, but you are enrolled in {$student['class']}."]);
+        exit;
+    }
+    
+    if ($session['division'] !== 'All' && $session['division'] !== $student['division']) {
+        http_response_code(403);
+        echo json_encode(['error' => "Division mismatch. This code is only for Division {$session['division']}, but you are in Division {$student['division']}."]);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("SELECT * FROM attendance_records WHERE session_id = ? AND student_id = ?");
+    $stmt->execute([$session['id'], $student['id']]);
+    if ($stmt->fetch()) {
+        http_response_code(400);
+        echo json_encode(['error' => 'You have already checked in for this session.']);
+        exit;
+    }
+    
+    $stmt = $pdo->prepare("
+        INSERT INTO attendance_records (session_id, student_id, device_id, status, marked_at)
+        VALUES (?, ?, ?, 'pending', ?)
+    ");
+    $stmt->execute([$session['id'], $student['id'], $device_id, $now]);
+    
+    echo json_encode([
+        'success' => true,
+        'session_id' => $session['id'],
+        'message' => "Check-in successful! Present marked for {$session['subject']} ({$session['class_name']})."
+    ]);
+    exit;
+}
+
+// 30. Text Roster File Ingestion Handlers (Sem1, Sem3/Sem5, Professional Sem3/Sem5)
+if ($route === 'admin/import-sem1' && $method === 'POST') {
+    $filePath = __DIR__ . '/bcom_regular_sem1.txt';
+    if (!file_exists($filePath)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Roster text file not found.']);
+        exit;
+    }
+    
+    $ocrText = file_get_contents($filePath);
+    $lines = explode("\n", trim($ocrText));
+    
+    $pdo->beginTransaction();
+    try {
+        $insertUser = $pdo->prepare("
+            INSERT INTO users (
+                username, password, role, name, email, phone, gender, category, 
+                subject, class, department, division, program, year, semester, 
+                fee_due, fee_paid, fee_total
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+        ");
+        
+        $program = "B.Com (Regular)";
+        $year = "1st Year";
+        $semester = "Semester 1";
+        $count = 0;
+        
+        foreach ($lines as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (count($parts) < 4) continue;
+            
+            $srNo = (int)$parts[0];
+            $subjectCode = $parts[count($parts) - 1];
+            
+            $nameParts = array_slice($parts, 2, count($parts) - 3);
+            $name = implode(' ', $nameParts);
+            
+            $division = 'A';
+            $username = (string)$srNo;
+            $password = (string)$srNo;
+            
+            $subject = 'Commerce';
+            if ($subjectCode === 'STAT') {
+                $subject = 'Statistics';
+                $division = ($srNo <= 190) ? 'A' : 'B';
+            } else if ($subjectCode === 'BA') {
+                $subject = 'Business Administration';
+                if ($srNo >= 351 && $srNo <= 400) $division = 'B';
+                else if ($srNo >= 401 && $srNo <= 590) $division = 'C';
+                else if ($srNo >= 591 && $srNo <= 780) $division = 'D';
+                else $division = 'E';
+            } else if ($subjectCode === 'CA') {
+                $subject = 'Computer Applications';
+                $division = ($srNo >= 901 && $srNo <= 1020) ? 'E' : 'F';
+            }
+            
+            $gender = 'Male';
+            $nameLower = strtolower($name);
+            if (
+                preg_match('/(ben|kumari|a|i|y)$/i', $nameLower) ||
+                strpos($nameLower, 'kumari') !== false ||
+                strpos($nameLower, 'devi') !== false ||
+                strpos($nameLower, 'ba') !== false
+            ) {
+                if (!preg_match('/(kumar|sinh|bhai|ji)$/i', $nameLower)) {
+                    $gender = 'Female';
+                }
+            }
+            
+            $baselineFee = ($gender === 'Female') ? 5000 : 6000;
+            
+            $insertUser->execute([
+                $username, $password, 'student', $name,
+                "{$username}@tolani.edu",
+                "+91 99000 0" . str_pad($username, 4, '0', STR_PAD_LEFT),
+                $gender, 'General', $subject, 'B.Com. Sem-I', 'Commerce Department',
+                $division, $program, $year, $semester, $baselineFee, 0, $baselineFee
+            ]);
+            $count++;
+        }
+        
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => "Successfully imported $count students to B.Com Regular Sem 1."]);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Import failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($route === 'admin/import-sem3-sem5' && $method === 'POST') {
+    $filePathSem3 = __DIR__ . '/bcom_regular_sem3.txt';
+    $filePathSem5 = __DIR__ . '/bcom_regular_sem5.txt';
+    
+    if (!file_exists($filePathSem3) || !file_exists($filePathSem5)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Roster files not found.']);
+        exit;
+    }
+    
+    $pdo->beginTransaction();
+    try {
+        $insertUser = $pdo->prepare("
+            INSERT INTO users (
+                username, password, role, name, email, phone, gender, category, 
+                subject, class, department, division, program, year, semester, 
+                fee_due, fee_paid, fee_total
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+        ");
+        
+        $program = "B.Com (Regular)";
+        $countSem3 = 0;
+        $countSem5 = 0;
+        
+        // 1. Process Semester 3
+        $linesSem3 = explode("\n", trim(file_get_contents($filePathSem3)));
+        foreach ($linesSem3 as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (count($parts) < 4) continue;
+            
+            $rollNo = (int)$parts[0];
+            $enrollmentNo = $parts[1];
+            $spdid = $parts[2];
+            $name = implode(' ', array_slice($parts, 3));
+            
+            $username = $spdid;
+            $password = $spdid;
+            
+            $division = 'A';
+            if ($rollNo >= 1 && $rollNo <= 190) $division = 'A';
+            else if (($rollNo >= 191 && $rollNo <= 322) || ($rollNo >= 401 && $rollNo <= 450)) $division = 'B';
+            else if ($rollNo >= 451 && $rollNo <= 640) $division = 'C';
+            else if ($rollNo >= 641 && $rollNo <= 830) $division = 'D';
+            else if ($rollNo >= 831 && $rollNo <= 1021) $division = 'E';
+            
+            $gender = 'Male';
+            $nameLower = strtolower($name);
+            if (
+                preg_match('/(ben|kumari|a|i|y)$/i', $nameLower) ||
+                strpos($nameLower, 'kumari') !== false ||
+                strpos($nameLower, 'devi') !== false ||
+                strpos($nameLower, 'ba') !== false
+            ) {
+                if (!preg_match('/(kumar|sinh|bhai|ji)$/i', $nameLower)) {
+                    $gender = 'Female';
+                }
+            }
+            
+            $baselineFee = ($gender === 'Female') ? 5000 : 6000;
+            
+            $insertUser->execute([
+                $username, $password, 'student', $name,
+                "{$username}@tolani.edu",
+                "+91 99000 0" . str_pad((string)$rollNo, 4, '0', STR_PAD_LEFT),
+                $gender, 'General', 'Commerce', 'B.Com. Sem-III', 'Commerce Department',
+                $division, $program, '2nd Year', 'Semester 3', $baselineFee, 0, $baselineFee
+            ]);
+            $countSem3++;
+        }
+        
+        // 2. Process Semester 5
+        $linesSem5 = explode("\n", trim(file_get_contents($filePathSem5)));
+        foreach ($linesSem5 as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (count($parts) < 4) continue;
+            
+            $rollNo = (int)$parts[0];
+            $enrollmentNo = $parts[1];
+            $spdid = $parts[2];
+            $name = implode(' ', array_slice($parts, 3));
+            
+            $username = $spdid;
+            $password = $spdid;
+            
+            $division = 'A';
+            if ($rollNo >= 1 && $rollNo <= 200) $division = 'A';
+            else if (($rollNo >= 201 && $rollNo <= 307) || ($rollNo >= 351 && $rollNo <= 500)) $division = 'B';
+            else if ($rollNo >= 501 && $rollNo <= 725) $division = 'C';
+            else if ($rollNo >= 726 && $rollNo <= 954) $division = 'D';
+            
+            $gender = 'Male';
+            $nameLower = strtolower($name);
+            if (
+                preg_match('/(ben|kumari|a|i|y)$/i', $nameLower) ||
+                strpos($nameLower, 'kumari') !== false ||
+                strpos($nameLower, 'devi') !== false ||
+                strpos($nameLower, 'ba') !== false
+            ) {
+                if (!preg_match('/(kumar|sinh|bhai|ji)$/i', $nameLower)) {
+                    $gender = 'Female';
+                }
+            }
+            
+            $baselineFee = ($gender === 'Female') ? 5000 : 6000;
+            
+            $insertUser->execute([
+                $username, $password, 'student', $name,
+                "{$username}@tolani.edu",
+                "+91 98000 0" . str_pad((string)$rollNo, 4, '0', STR_PAD_LEFT),
+                $gender, 'General', 'Commerce', 'B.Com. Sem-V', 'Commerce Department',
+                $division, $program, '3rd Year', 'Semester 5', $baselineFee, 0, $baselineFee
+            ]);
+            $countSem5++;
+        }
+        
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => "Successfully imported $countSem3 Sem 3 students and $countSem5 Sem 5 students."]);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Import failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
+if ($route === 'admin/import-prof-sem3-sem5' && $method === 'POST') {
+    $filePathSem3 = __DIR__ . '/bcom_prof_sem3_raw.txt';
+    $filePathSem5 = __DIR__ . '/bcom_prof_sem5_raw.txt';
+    
+    if (!file_exists($filePathSem3) || !file_exists($filePathSem5)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'Roster files not found.']);
+        exit;
+    }
+    
+    $pdo->beginTransaction();
+    try {
+        $insertUser = $pdo->prepare("
+            INSERT INTO users (
+                username, password, role, name, email, phone, gender, category, 
+                subject, class, department, division, program, year, semester, 
+                fee_due, fee_paid, fee_total
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+        ");
+        
+        $feeBoy = 9500;
+        $feeGirl = 8500;
+        $stmt = $pdo->query("SELECT value FROM settings WHERE key_name = 'fee_baseline_bcom_professional_boy'");
+        $val = $stmt->fetchColumn();
+        if ($val) $feeBoy = (double)$val;
+        $stmt = $pdo->query("SELECT value FROM settings WHERE key_name = 'fee_baseline_bcom_professional_girl'");
+        $val = $stmt->fetchColumn();
+        if ($val) $feeGirl = (double)$val;
+        
+        $program = "B.Com (Professional)";
+        $countSem3 = 0;
+        $countSem5 = 0;
+        
+        // 1. Process Semester 3
+        $linesSem3 = explode("\n", trim(file_get_contents($filePathSem3)));
+        foreach ($linesSem3 as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (count($parts) < 7) continue;
+            
+            $rollNo = (int)$parts[0];
+            $enrollmentNo = $parts[1];
+            $spdid = $parts[2];
+            $gender = $parts[3];
+            $category = $parts[count($parts) - 1];
+            $phone = $parts[count($parts) - 2];
+            $email = $parts[count($parts) - 3];
+            
+            $nameParts = array_slice($parts, 4, count($parts) - 7);
+            $name = implode(' ', $nameParts);
+            
+            $username = $spdid;
+            $password = $spdid;
+            $division = 'A';
+            $subject = 'Commerce';
+            
+            $baselineFee = ($gender === 'Female') ? $feeGirl : $feeBoy;
+            
+            $insertUser->execute([
+                $username, $password, 'student', $name, $email, $phone,
+                $gender, $category, $subject, 'B.Com. Prof. Sem-III', 'Commerce Department',
+                $division, $program, '2nd Year', 'Semester 3', $baselineFee, 0, $baselineFee
+            ]);
+            $countSem3++;
+        }
+        
+        // 2. Process Semester 5
+        $linesSem5 = explode("\n", trim(file_get_contents($filePathSem5)));
+        foreach ($linesSem5 as $line) {
+            $parts = preg_split('/\s+/', trim($line));
+            if (count($parts) < 6) continue;
+            
+            $rollNo = (int)$parts[0];
+            $spdid = $parts[1];
+            $gender = $parts[2];
+            $category = $parts[3];
+            $phone = $parts[count($parts) - 1];
+            $email = $parts[count($parts) - 2];
+            
+            $nameParts = array_slice($parts, 4, count($parts) - 6);
+            $name = implode(' ', $nameParts);
+            
+            $username = $spdid;
+            $password = $spdid;
+            $division = 'A';
+            $subject = 'Commerce';
+            
+            $baselineFee = ($gender === 'Female') ? $feeGirl : $feeBoy;
+            
+            $insertUser->execute([
+                $username, $password, 'student', $name, $email, $phone,
+                $gender, $category, $subject, 'B.Com. Prof. Sem-V', 'Commerce Department',
+                $division, $program, '3rd Year', 'Semester 5', $baselineFee, 0, $baselineFee
+            ]);
+            $countSem5++;
+        }
+        
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => "Successfully imported $countSem3 Sem 3 students and $countSem5 Sem 5 students for Professional program."]);
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        http_response_code(500);
+        echo json_encode(['error' => 'Import failed: ' . $e->getMessage()]);
+    }
+    exit;
+}
+
 // Fallback: 404 Route Not Found
 http_response_code(404);
 echo json_encode(['success' => false, 'error' => 'API Route not found: ' . $route]);
