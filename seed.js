@@ -368,37 +368,56 @@ try {
         0, 0, 0
     );
 
-    // Insert Teacher (Assigned to B.Com Regular)
-    insertUser.run(
-        'teacher',
-        'okokokok',
-        'teacher',
-        'Prof. Sarah Jenkins',
-        'khushichovatiya489@gmail.com',
-        '+91 99999 77777',
-        'Female',
-        'General',
-        'Statistics',
-        'B.Com. Sem-I',
-        'Commerce & Accountancy',
-        'All',
-        'B.Com (Regular)',
-    );
+    // Seed the 26 correct teachers
+    const teachersList = [
+        ['abb', 'Mrs. A. V. Bharathi', 'MD/ECO', 'Commerce & Accountancy'],
+        ['dj', 'Prof. D. J. Jadeja', 'Env. Sci.', 'English Department'],
+        ['drm', 'Dr. D. R. Maheshwari', 'AEC/ENG', 'English Department'],
+        ['rk', 'Dr. R. K. Thapa', 'Business Organisation', 'Commerce & Accountancy'],
+        ['drthapa', 'Prof. P. M. Thapa', 'Financial Accounting', 'Commerce & Accountancy'],
+        ['gd', 'Dr. Gaurav Thakor', 'MIC/BA', 'Physical Education'],
+        ['hng', 'Prof. H. N. G.', 'BUSI. A/C', 'Commerce & Accountancy'],
+        ['jkr', 'Prof. J. K. R.', 'SEC/SM', 'Commerce & Accountancy'],
+        ['jr', 'Prof. J. R.', 'SEC', 'Commerce & Accountancy'],
+        ['jrr', 'Dr. Jagdish R. Raiyani', 'Commerce', 'Commerce & Accountancy'],
+        ['khk', 'Dr. Kamal H. Kharecha', 'BUSI. A/C', 'Commerce & Accountancy'],
+        ['krt', 'Prof. K. R. Trivedi', 'MIC/Stats', 'Commerce & Accountancy'],
+        ['kt', 'Prof. K. T. Mehta', 'Commerce', 'Commerce & Accountancy'],
+        ['kvm', 'Dr. Kalpesh V. Machhar', 'AEC/ENG', 'English Department'],
+        ['mg', 'Prof. M. G.', 'Commerce', 'Commerce & Accountancy'],
+        ['mkp', 'Dr. Manish K. Pandya', 'Env. Sci.', 'English Department'],
+        ['pbc', 'Dr. Peena B. Chauhan', 'MIC/BA', 'Commerce & Accountancy'],
+        ['pkt', 'Prof. P. K. Trivedi', 'FIN. A/C', 'Commerce & Accountancy'],
+        ['pmc', 'Prof. P. M. Chauhan', 'Commerce', 'Commerce & Accountancy'],
+        ['pmt', 'Prof. P. M. Thapa', 'MD/ECO', 'Commerce & Accountancy'],
+        ['teacher', 'Prof. Sarah Jenkins', 'Statistics', 'Commerce & Accountancy'],
+        ['rm', 'Prof. R. M.', 'SEC', 'Commerce & Accountancy'],
+        ['sap', 'Prof. S. A. Patel', 'BUSI. A/C', 'Commerce & Accountancy'],
+        ['sda', 'Mr. Dhirubha P. Sodha', 'Cost A/C', 'Commerce & Accountancy'],
+        ['sjt', 'Prof. S. J. Trivedi', 'TAX P.', 'Commerce & Accountancy'],
+        ['ta', 'Prof. T. A.', 'BUSI. A/C', 'Commerce & Accountancy']
+    ];
 
-    // Insert 5 Custom Teachers
-    for (let tNum = 101; tNum <= 105; tNum++) {
+    for (const t of teachersList) {
+        const username = t[0];
+        const name = t[1];
+        const subject = t[2];
+        const dept = t[3];
+        const email = username + '@tcc.ac.in';
+        const phone = '+91 99000 00000';
+        
         insertUser.run(
-            String(tNum),
+            username,
             '1405',
             'teacher',
-            `Instructor ${tNum}`,
-            `instructor${tNum}@tolani.edu`,
-            `+91 99000 00${tNum}`,
+            name,
+            email,
+            phone,
             'Male',
             'General',
-            'Commerce',
-            'B.Com. Sem-I',
-            'Commerce & Accountancy',
+            subject,
+            'All',
+            dept,
             'All',
             'B.Com (Regular)',
             'N/A',
@@ -406,67 +425,7 @@ try {
             0, 0, 0
         );
     }
-
-    // Insert Teacher (Assigned to B.Com Professional)
-    insertUser.run(
-        'teacherpro',
-        'okokokok',
-        'teacher',
-        'Prof. Rahul Sharma',
-        'rahul.sharma@tolani.edu',
-        '+91 99999 66666',
-        'Male',
-        'General',
-        'Corporate Accounting',
-        'B.Com. Sem-V',
-        'Commerce & Accountancy',
-        'All',
-        'B.Com (Professional)',
-        'N/A',
-        'N/A',
-        0, 0, 0
-    );
-
-    // Insert Teacher (Assigned to B.Com Professional Sem-III)
-    insertUser.run(
-        'tulsigarva',
-        'okokokok',
-        'teacher',
-        'Tulsi Garva',
-        'tulsi.garva@tolani.edu',
-        '9106947048',
-        'Female',
-        'General',
-        'Advance Financial Accounting',
-        'B.Com. Sem-III',
-        'Commerce & Accountancy',
-        'All',
-        'B.Com (Professional)',
-        'N/A',
-        'N/A',
-        0, 0, 0
-    );
-
-    // Insert Teacher (Assigned to M.Com)
-    insertUser.run(
-        'teachermcom',
-        'okokokok',
-        'teacher',
-        'Dr. Jennifer Smith',
-        'jennifer.smith@tolani.edu',
-        '+91 99999 55555',
-        'Female',
-        'General',
-        'Managerial Economics',
-        'M.Com. Sem-I',
-        'Commerce & Accountancy',
-        'All',
-        'M.Com',
-        'N/A',
-        'N/A',
-        0, 0, 0
-    );
-    console.log('Admin and Faculty instructions seeded.');
+    console.log('Admin and 26 Faculty members seeded.');
 
     // --- Seed Students dynamically loaded from JSON files ---
     studentsList.forEach((s) => {
