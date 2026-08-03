@@ -101,7 +101,7 @@ if (($route === 'logout' || $route === 'auth/logout') && $method === 'POST') {
 
 // 4. Get Faculty/Admin Users list (for filtering reports)
 if ($route === 'users' && $method === 'GET') {
-    $stmt = $pdo->query("SELECT id, name, username, email, phone, gender, department, role FROM users");
+    $stmt = $pdo->query("SELECT * FROM users");
     $users = $stmt->fetchAll();
     echo json_encode(['success' => true, 'users' => $users]);
     exit;
